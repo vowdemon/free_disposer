@@ -1169,10 +1169,11 @@ class _TestDisposable with DisposableMixin {
   int _registeredDisposerCount = 0;
 
   @override
-  void onDispose(Disposer disposer) {
-    if (isDisposed) return;
-    super.onDispose(disposer);
+  Disposer? onDispose(Disposer? disposer) {
+    if (isDisposed || disposer == null) return null;
+    final result = super.onDispose(disposer);
     _registeredDisposerCount++;
+    return result;
   }
 
   @override
