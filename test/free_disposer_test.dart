@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:free_disposer/free_disposer.dart';

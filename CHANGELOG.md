@@ -1,3 +1,11 @@
-## 1.0.0
+# Changelog
 
-- Initial version.
+## [1.0.1] - 2025-9-15
+
+- Added custom adapter system
+- Improved null safety and performance
+- Enhanced documentation and examples
+
+## [1.0.0] - 2025-9-12
+
+- Initial release

@@ -123,7 +123,7 @@
 ///
 /// The library is designed to work safely in concurrent environments.
 /// All operations are atomic and disposal can happen from any isolate.
-library free_disposer;
+library;
 
 import 'dart:async';
 

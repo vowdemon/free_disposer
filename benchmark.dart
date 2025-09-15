@@ -406,7 +406,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
 
   print('  Testing different delay times:');
   for (final delayMicros in [1, 5, 10, 50, 100]) {
-    await _measureTimeAsync('    100 async disposers (${delayMicros}μs each)',
+    await _measureTimeAsync('    100 async disposers ($delayMicrosμs each)',
         () async {
       final disposable = _TestDisposable();
       for (int i = 0; i < 100; i++) {
@@ -607,8 +607,9 @@ T _measureTimeSync<T>(String description, T Function() operation) {
 String _formatBytes(int bytes) {
   if (bytes < 1024) return '${bytes}B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-  if (bytes < 1024 * 1024 * 1024)
+  if (bytes < 1024 * 1024 * 1024) {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+  }
   return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
 }
 
