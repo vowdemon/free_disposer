@@ -27,9 +27,9 @@
 ///     _timer = Timer.periodic(Duration(seconds: 1), (_) {});
 ///     _subscription = someStream.listen((_) {});
 ///
-///     // Register disposers
-///     onDispose(() => _timer.cancel());
-///     onDispose(() => _subscription.cancel());
+///     // Register resources using extension methods
+///     _timer.disposeBy(this);
+///     _subscription.disposeBy(this);
 ///   }
 /// }
 ///
@@ -45,8 +45,8 @@
 /// final subscription = stream.listen((_) {});
 ///
 /// // Attach disposers - cleanup happens automatically on GC
-/// obj.attachDisposer(() => timer.cancel());
-/// obj.attachDisposer(() => subscription.cancel());
+/// obj.disposeWith(() => timer.cancel());
+/// obj.disposeWith(() => subscription.cancel());
 ///
 /// // Or dispose manually
 /// await obj.disposeAttached();
@@ -59,9 +59,9 @@
 /// final timer = Timer.periodic(Duration(seconds: 1), (_) {});
 /// final controller = StreamController<int>();
 ///
-/// // Automatic disposal with service
-/// timer.disposeWith(service);
-/// controller.disposeWith(service);
+/// // Automatic disposal with service using built-in adapters
+/// timer.disposeBy(service);
+/// controller.disposeBy(service);
 ///
 /// await service.dispose(); // Timer and controller cleaned up
 /// ```
@@ -79,11 +79,10 @@
 /// );
 ///
 /// // Now DatabaseConnection works with disposal system
+/// final service = MyService();
 /// final db = DatabaseConnection();
-/// final disposer = db.toDisposer;
-/// if (disposer != null) {
-///   await disposer(); // Database closed
-/// }
+/// db.disposeBy(service); // Works automatically with adapter
+/// await service.dispose(); // Database closed
 /// ```
 ///
 /// ## Built-in Type Support
@@ -93,8 +92,8 @@
 /// - `Disposable` - calls `dispose()`
 /// - `StreamSubscription` - calls `cancel()`
 /// - `Timer` - calls `cancel()`
-/// - `StreamController` - calls `close()` with timeout handling
-/// - `StreamSink` - calls `close()` with timeout handling
+/// - `StreamController` - calls `close()` with timeout handling (10ms)
+/// - `StreamSink` - calls `close()` with timeout handling (10ms)
 /// - `Sink` - calls `close()`
 ///
 /// ## Performance Characteristics
@@ -123,6 +122,14 @@
 ///
 /// The library is designed to work safely in concurrent environments.
 /// All operations are atomic and disposal can happen from any isolate.
+///
+/// ## Important Notes
+///
+/// **⚠️ Blacklisted Types**: Cannot attach disposers to primitive types
+/// (`int`, `double`, `num`, `bool`, `String`), `null`, enums, symbols, or `Type` objects.
+///
+/// **⚠️ Memory Leaks**: Avoid capturing `this` in disposer functions when using
+/// with `DisposableMixin`, as it prevents garbage collection.
 library;
 
 import 'dart:async';

@@ -40,6 +40,8 @@ typedef DisposerAdapter<T> = Disposer Function(T object);
 /// await disposer(); // Closes the HTTP client
 /// ```
 class DisposerAdapterManager {
+  DisposerAdapterManager._();
+
   /// List of user-registered adapter entries.
   static final List<_Entry> _userEntries = [];
 

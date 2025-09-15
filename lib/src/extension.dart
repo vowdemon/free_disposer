@@ -10,8 +10,9 @@ part of '../free_disposer.dart';
 /// - [StreamSubscription] → calls `cancel()`
 /// - [Timer] → calls `cancel()`
 /// - [StreamController] → calls `close()`
+/// - [StreamSink] → calls `close()`
 /// - [Sink] → calls `close()`
-extension DisposableExtension<T extends Object> on T {
+extension DisposableExtension on Object {
   /// Convert this object to a disposer function.
   ///
   /// **Returns:**
@@ -28,7 +29,7 @@ extension DisposableExtension<T extends Object> on T {
   /// ```
   Disposer? get toDisposer => DisposerAdapterManager.getDisposer(this);
 
-  /// Register this object with a [DisposableMixin] for automatic disposal.
+  /// Register this object with a [AutoDisposer] for automatic disposal.
   ///
   /// When the [disposable] is disposed, this object will be disposed too.
   /// If no disposer can be created for this object (toDisposer returns null),
@@ -43,24 +44,102 @@ extension DisposableExtension<T extends Object> on T {
   /// final timer = Timer.periodic(Duration(seconds: 1), (_) {});
   /// final customObject = SomeCustomObject(); // might not have adapter
   ///
-  /// timer.disposeWith(service);        // will work (built-in support)
-  /// customObject.disposeWith(service); // safe even if no adapter exists
+  /// timer.disposeBy(service);        // will work (built-in support)
+  /// customObject.disposeBy(service); // safe even if no adapter exists
   /// await service.dispose(); // Timer cancelled, customObject ignored
   /// ```
-  void disposeWith(DisposableMixin disposable) {
-    try {
-      disposable.onDispose(toDisposer);
-    } catch (e, st) {
-      Zone.current.handleUncaughtError(e, st);
-    }
+  void disposeBy(Object? disposable) {
+    if (disposable == null) return;
+
+    AutoDisposer.attachDisposer(disposable, toDisposer);
   }
+
+  /// Attach a disposer function to this object.
+  ///
+  /// When this object is garbage collected (or manually disposed via
+  /// [disposeAttached]), the provided [disposer] will be executed.
+  ///
+  /// **Parameters:**
+  /// - [disposer]: The cleanup function to attach (can be `null`)
+  ///
+  /// **Returns:**
+  /// A function that, when invoked, detaches the specific [disposer]
+  /// from this object. Returns `null` if [disposer] is `null`.
+  ///
+  /// **Example:**
+  /// ```dart
+  /// final obj = Object();
+  /// final detach = obj.disposeWith(() => print('cleanup'));
+  ///
+  /// // Later, if needed
+  /// detach?.call();
+  /// ```
+  Disposer? disposeWith(Disposer? disposer) {
+    AutoDisposer.attachDisposer(this, disposer);
+    return () => AutoDisposer.detachDisposer(this, disposer);
+  }
+
+  /// Attach multiple disposer functions to this object.
+  ///
+  /// **Parameters:**
+  /// - [disposers]: Iterable of disposer functions (null entries are ignored)
+  ///
+  /// **Returns:**
+  /// A function that detaches all the specified [disposers] from this object.
+  Disposer? disposeWithAll(Iterable<Disposer?> disposers) {
+    for (final d in disposers) {
+      if (d == null) continue;
+      AutoDisposer.attachDisposer(this, d);
+    }
+    return () {
+      for (final d in disposers) {
+        if (d == null) continue;
+        AutoDisposer.detachDisposer(this, d);
+      }
+    };
+  }
+
+  /// Detach all disposers from this object without executing them.
+  ///
+  /// **Example:**
+  /// ```dart
+  /// final obj = Object();
+  /// obj.disposeWith(() => print('disposed'));
+  /// obj.detachDisposers(); // No cleanup will occur
+  /// ```
+  void detachDisposers() => AutoDisposer.detachDisposers(this);
+
+  /// Execute all disposers attached to this object.
+  ///
+  /// **Returns:**
+  /// A [Future] that completes when all disposers have finished executing.
+  ///
+  /// **Example:**
+  /// ```dart
+  /// final obj = Object();
+  /// obj.disposeWith(() => print('disposed'));
+  /// await obj.disposeAttached(); // prints 'disposed'
+  /// ```
+  FutureOr<void> disposeAttached() => AutoDisposer.disposeObject(this);
+
+  /// Check if this object has any attached disposers.
+  ///
+  /// **Returns:**
+  /// `true` if this object has disposers, `false` otherwise.
+  bool get hasAttachedDisposers => AutoDisposer.hasDisposers(this);
+
+  /// Get the number of disposers attached to this object.
+  ///
+  /// **Returns:**
+  /// The number of attached disposers.
+  int get attachedDisposerCount => AutoDisposer.disposerCount(this);
 }
 
 /// Extension for batch disposal operations on iterables.
 ///
 /// This extension allows disposing multiple objects at once.
-extension AutoDisposeList on Iterable<Object> {
-  /// Register all objects in this iterable with a [DisposableMixin].
+extension DisposableIterableExtension on Iterable<Object> {
+  /// Register all objects in this iterable with a [AutoDisposer].
   ///
   /// Each object in the iterable will be registered for disposal
   /// when [disposable] is disposed.
@@ -77,101 +156,20 @@ extension AutoDisposeList on Iterable<Object> {
   ///   HttpClient(),
   /// ];
   ///
-  /// resources.disposeAllWith(service);
+  /// resources.disposeAllBy(service);
   /// await service.dispose(); // All resources will be disposed
   /// ```
-  void disposeAllWith(DisposableMixin disposable) {
-    for (final o in this) {
-      o.disposeWith(disposable);
-    }
-  }
-}
+  void disposeAllBy(Object? disposable) {
+    if (disposable == null) return;
 
-/// Extension that provides [AutoDisposer] operations on any object.
-///
-/// This extension adds convenient methods for working with [AutoDisposer]
-/// directly on object instances. All methods handle null disposers gracefully.
-extension AutoDisposeExtension on Object {
-  /// Attach a disposer to this object.
-  ///
-  /// If [disposer] is null, this method does nothing. This allows for
-  /// convenient chaining with nullable disposers.
-  ///
-  /// **Parameters:**
-  /// - [disposer]: The cleanup function to attach, or null to ignore
-  ///
-  /// **Throws:**
-  /// - [UnsupportedError] if this object is a blacklisted type
-  ///
-  /// **Example:**
-  /// ```dart
-  /// final obj = Object();
-  /// final disposer = someObject.toDisposer; // might be null
-  /// obj.attachDisposer(disposer); // safe even if disposer is null
-  /// ```
-  void attachDisposer(Disposer? disposer) {
-    if (disposer != null) {
-      AutoDisposer.attachDisposer(this, disposer);
-    }
-  }
+    final s = <Disposer>{};
+    for (final e in this) {
+      final d = e.toDisposer;
 
-  /// Attach multiple disposers to this object.
-  ///
-  /// Null disposers in the list are automatically filtered out and ignored.
-  /// This allows for convenient bulk attachment of potentially nullable disposers.
-  ///
-  /// **Parameters:**
-  /// - [disposers]: The list of cleanup functions to attach (nulls are ignored)
-  ///
-  /// **Example:**
-  /// ```dart
-  /// final obj = Object();
-  /// obj.attachDisposers([
-  ///   timer.toDisposer,        // might be null
-  ///   controller.toDisposer,   // might be null
-  ///   () => print('cleanup'),  // non-null
-  /// ]); // Only non-null disposers are attached
-  /// ```
-  void attachDisposers(List<Disposer?> disposers) {
-    for (final d in disposers) {
       if (d != null) {
-        AutoDisposer.attachDisposer(this, d);
+        s.add(d);
       }
     }
+    AutoDisposer.attachDisposers(disposable, s);
   }
-
-  /// Detach all disposers from this object without executing them.
-  ///
-  /// **Example:**
-  /// ```dart
-  /// final obj = Object();
-  /// obj.attachDisposer(() => print('disposed'));
-  /// obj.detachDisposers(); // No cleanup will occur
-  /// ```
-  void detachDisposers() => AutoDisposer.detachDisposers(this);
-
-  /// Execute all disposers attached to this object.
-  ///
-  /// **Returns:**
-  /// A [Future] that completes when all disposers have finished executing.
-  ///
-  /// **Example:**
-  /// ```dart
-  /// final obj = Object();
-  /// obj.attachDisposer(() => print('disposed'));
-  /// await obj.disposeAttached(); // prints 'disposed'
-  /// ```
-  FutureOr<void> disposeAttached() => AutoDisposer.disposeObject(this);
-
-  /// Check if this object has any attached disposers.
-  ///
-  /// **Returns:**
-  /// `true` if this object has disposers, `false` otherwise.
-  bool get hasAttachedDisposers => AutoDisposer.hasDisposers(this);
-
-  /// Get the number of disposers attached to this object.
-  ///
-  /// **Returns:**
-  /// The number of attached disposers.
-  int get attachedDisposerCount => AutoDisposer.disposerCount(this);
 }

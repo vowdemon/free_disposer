@@ -28,8 +28,8 @@ Future<void> basicUsageExample() async {
   controller.stream.listen((data) => print('  Received: $data'));
 
   // Attach resources to service
-  timer.disposeWith(service);
-  controller.disposeWith(service);
+  timer.disposeBy(service);
+  controller.disposeBy(service);
 
   controller.add('Hello');
   controller.add('World');
@@ -54,7 +54,7 @@ Future<void> autoCleanupExample() async {
       (_) => print('  Auto timer tick'),
     );
 
-    object.attachDisposer(() {
+    object.disposeWith(() {
       timer.cancel();
       finalizerExecuted = true;
       print('  Finalizer executed: Timer auto-cleaned!');
@@ -89,12 +89,12 @@ Future<void> manualCleanupExample() async {
   );
 
   // Attach disposers
-  object.attachDisposer(() {
+  object.disposeWith(() {
     httpClient.close();
     print('  HTTP Client closed');
   });
 
-  object.attachDisposer(() {
+  object.disposeWith(() {
     timer.cancel();
     print('  Timer cancelled');
   });
@@ -144,22 +144,22 @@ class MyApp with DisposableMixin {
     print('  Starting app...');
 
     _messageController = StreamController<String>();
-    _messageController.disposeWith(this);
+    _messageController.disposeBy(this);
 
     _heartbeatTimer = Timer.periodic(Duration(seconds: 1), (_) {
       _messageController.add('heartbeat');
     });
-    _heartbeatTimer.disposeWith(this);
+    _heartbeatTimer.disposeBy(this);
 
     _httpClient = HttpClient();
-    _httpClient.disposeWith(this);
+    _httpClient.disposeBy(this);
 
     _messageSubscription = _messageController.stream.listen((message) {
       print('  $message');
     });
-    _messageSubscription.disposeWith(this);
+    _messageSubscription.disposeBy(this);
 
-    onDispose(() => print('  Custom cleanup executed'));
+    disposeWith(() => print('  Custom cleanup executed'));
 
     print('  App started');
   }
@@ -209,7 +209,7 @@ Future<void> customAdapterExample() async {
   final db = DatabaseConnection('user_db');
 
   // Now works with disposeWith thanks to adapter
-  db.disposeWith(service);
+  db.disposeBy(service);
   print('  Database attached to service');
 
   // Use resource

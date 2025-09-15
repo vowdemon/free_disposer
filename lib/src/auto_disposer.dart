@@ -22,29 +22,13 @@ class AutoDisposer {
 
   static final Finalizer<Set<Disposer>> _finalizer = Finalizer<Set<Disposer>>(
     (disposers) {
-      if (disposers.isEmpty) return;
       for (final d in disposers) {
-        try {
-          final result = d();
-          if (result is Future) {
-            result.catchError(
-              (e, st) => Zone.current.handleUncaughtError(e, st),
-            );
-          }
-        } catch (e, st) {
-          Zone.current.handleUncaughtError(e, st);
-        }
+        d();
       }
     },
   );
 
   static final Expando<Object> _detachToken = Expando<Object>();
-
-  static final Set<WeakReference<Object>> _pendingAttach =
-      <WeakReference<Object>>{};
-  static final Expando<WeakReference<Object>> _objectToWeakRef =
-      Expando<WeakReference<Object>>();
-  static bool _batchScheduled = false;
 
   /// Attach a disposer to an object.
   ///
@@ -73,77 +57,39 @@ class AutoDisposer {
   /// AutoDisposer.attachDisposer(obj, () => timer.cancel());
   /// // Timer will be cancelled when obj is garbage collected
   /// ```
-  static void attachDisposer(Object object, Disposer disposer) {
+  static void attachDisposer(Object object, Disposer? disposer) {
     if (_isBlacklisted(object)) {
       throw UnsupportedError(
-        'Cannot attach disposer to object of type ${object.runtimeType}',
-      );
+          'Cannot attach disposer to object of type ${object.runtimeType}');
     }
+
+    if (disposer == null) return;
 
     final disposers = _disposers[object] ??= <Disposer>{};
     disposers.add(disposer);
 
     if (_detachToken[object] == null) {
-      final weakRef = WeakReference(object);
-      _pendingAttach.add(weakRef);
-      _objectToWeakRef[object] = weakRef;
-      _scheduleBatchAttach();
-    }
-  }
-
-  static void _scheduleBatchAttach() {
-    if (_batchScheduled) return;
-    _batchScheduled = true;
-
-    Timer.run(_processBatchAttach);
-  }
-
-  static void _processBatchAttach() {
-    _batchScheduled = false;
-
-    if (_pendingAttach.isEmpty) return;
-
-    final toRemove = <WeakReference<Object>>{};
-    for (final weakRef in _pendingAttach) {
-      final object = weakRef.target;
-      if (object == null) {
-        toRemove.add(weakRef);
-        continue;
-      }
-
       final disposers = _disposers[object];
       if (disposers != null && _detachToken[object] == null) {
         _detachToken[object] = disposers;
         _finalizer.attach(object, disposers, detach: _detachToken[object]);
-
-        _objectToWeakRef[object] = null;
       }
     }
-
-    _pendingAttach.removeAll(toRemove);
-    _pendingAttach.clear();
   }
 
-  /// Immediately process all pending Finalizer attachments.
-  ///
-  /// This method can be called to ensure all pending Finalizer operations
-  /// are processed immediately, rather than waiting for the next event loop
-  /// iteration. Useful for testing or when immediate attachment is required.
-  ///
-  /// **Example:**
-  /// ```dart
-  /// // Attach many disposers
-  /// for (int i = 0; i < 1000; i++) {
-  ///   final obj = Object();
-  ///   obj.attachDisposer(() => print('disposed $i'));
-  /// }
-  ///
-  /// // Ensure all finalizers are attached immediately
-  /// AutoDisposer.flushPendingAttachments();
-  /// ```
-  static void flushPendingAttachments() {
-    if (_pendingAttach.isNotEmpty) {
-      _processBatchAttach();
+  static void attachDisposers(Object object, Set<Disposer> disposers) {
+    if (_isBlacklisted(object)) {
+      throw UnsupportedError(
+          'Cannot attach disposer to object of type ${object.runtimeType}');
+    }
+
+    if (disposers.isEmpty) return;
+
+    final disposersStore = _disposers[object] ??= <Disposer>{};
+    disposersStore.addAll(disposers);
+
+    if (_detachToken[object] == null) {
+      _finalizer.attach(object, disposersStore, detach: _detachToken[object]);
     }
   }
 
@@ -170,8 +116,8 @@ class AutoDisposer {
   /// **Example:**
   /// ```dart
   /// final obj = Object();
-  /// obj.attachDisposer(() => print('sync cleanup'));
-  /// obj.attachDisposer(() async => await asyncCleanup());
+  /// obj.disposeWith(() => print('sync cleanup'));
+  /// obj.disposeWith(() async => await asyncCleanup());
   ///
   /// await AutoDisposer.disposeObject(obj);
   /// // Both disposers executed, finalizer detached
@@ -236,18 +182,12 @@ class AutoDisposer {
   /// **Example:**
   /// ```dart
   /// final obj = Object();
-  /// obj.attachDisposer(() => print('this will not execute'));
+  /// obj.disposeWith(() => print('this will not execute'));
   ///
   /// AutoDisposer.detachDisposers(obj);
   /// // No cleanup will occur when obj is GC'd
   /// ```
   static void detachDisposers(Object object) {
-    final weakRef = _objectToWeakRef[object];
-    if (weakRef != null) {
-      _pendingAttach.remove(weakRef);
-      _objectToWeakRef[object] = null;
-    }
-
     final token = _detachToken[object];
     if (token != null) {
       try {
@@ -271,12 +211,12 @@ class AutoDisposer {
   /// **Parameters:**
   /// - [object]: The object to detach the disposer from
   /// - [disposer]: The specific disposer to detach (currently unused)
-  static void detachDisposer(Object object, Disposer disposer) {
-    final token = _detachToken[object];
-    if (token != null) {
-      _finalizer.detach(token);
-    }
-    _detachToken[object] = null;
+  static void detachDisposer(Object object, Disposer? disposer) {
+    if (disposer == null) return;
+
+    final disposers = _disposers[object];
+    if (disposers == null) return;
+    disposers.remove(disposer);
   }
 
   /// Check if an object has any attached disposers.
@@ -292,7 +232,7 @@ class AutoDisposer {
   /// final obj = Object();
   /// print(AutoDisposer.hasDisposers(obj)); // false
   ///
-  /// obj.attachDisposer(() {});
+  /// obj.disposeWith(() {});
   /// print(AutoDisposer.hasDisposers(obj)); // true
   /// ```
   static bool hasDisposers(Object object) =>
@@ -311,8 +251,8 @@ class AutoDisposer {
   /// final obj = Object();
   /// print(AutoDisposer.disposerCount(obj)); // 0
   ///
-  /// obj.attachDisposer(() {});
-  /// obj.attachDisposer(() {});
+  /// obj.disposeWith(() {});
+  /// obj.disposeWith(() {});
   /// print(AutoDisposer.disposerCount(obj)); // 2
   /// ```
   static int disposerCount(Object object) => _disposers[object]?.length ?? 0;

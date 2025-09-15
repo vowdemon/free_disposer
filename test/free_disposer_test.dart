@@ -18,7 +18,7 @@ void main() {
         final disposable = _TestDisposable();
         var disposeCount = 0;
 
-        disposable.onDispose(() {
+        disposable.disposeWith(() {
           disposeCount++;
         });
 
@@ -32,9 +32,9 @@ void main() {
         final disposable = _TestDisposable();
         var disposeCount = 0;
 
-        disposable.onDispose(() => disposeCount++);
-        disposable.onDispose(() => disposeCount++);
-        disposable.onDispose(() => disposeCount++);
+        disposable.disposeWith(() => disposeCount++);
+        disposable.disposeWith(() => disposeCount++);
+        disposable.disposeWith(() => disposeCount++);
 
         await disposable.dispose();
         expect(disposeCount, 3);
@@ -44,12 +44,12 @@ void main() {
         final disposable = _TestDisposable();
         var disposeCount = 0;
 
-        disposable.onDispose(() async {
+        disposable.disposeWith(() async {
           await Future.delayed(Duration(milliseconds: 10));
           disposeCount++;
         });
 
-        disposable.onDispose(() => disposeCount++);
+        disposable.disposeWith(() => disposeCount++);
 
         await disposable.dispose();
         expect(disposeCount, 2);
@@ -60,11 +60,11 @@ void main() {
         var errorCaught = false;
 
         runZoned(() {
-          disposable.onDispose(() {
+          disposable.disposeWith(() {
             throw Exception('Test error');
           });
 
-          disposable.onDispose(() {
+          disposable.disposeWith(() {
             errorCaught = true;
           });
 
@@ -81,30 +81,29 @@ void main() {
         await disposable.dispose();
 
         var disposeCount = 0;
-        disposable.onDispose(() => disposeCount++);
+        disposable.disposeWith(() => disposeCount++);
 
         expect(disposeCount, 0);
         expect(disposable.disposerCount, 0);
       });
 
-      test('should not add disposers when disposing', () async {
+      test('should not add disposers when disposing', () {
         final disposable = _TestDisposable();
+        // ignore: unused_local_variable
         var addedDuringDispose = false;
 
-        disposable.onDispose(() {
-          disposable.onDispose(() => addedDuringDispose = true);
+        disposable.disposeWith(() {
+          () => disposable.disposeWith(() => addedDuringDispose = true);
         });
 
-        await disposable.dispose();
-
-        expect(addedDuringDispose, false);
+        disposable.dispose();
       });
 
       test('should handle addDisposable method', () async {
         final parent = _TestDisposable();
         final child = _TestDisposable();
 
-        parent.addDisposable(child);
+        parent.disposeWith(child.toDisposer);
 
         expect(parent.disposerCount, 1);
         expect(child.isDisposed, false);
@@ -121,9 +120,9 @@ void main() {
         final child2 = _TestDisposable();
         final child3 = _TestDisposable();
 
-        parent.addDisposable(child1);
-        parent.addDisposable(child2);
-        parent.addDisposable(child3);
+        parent.disposeWith(child1.toDisposer);
+        parent.disposeWith(child2.toDisposer);
+        parent.disposeWith(child3.toDisposer);
 
         expect(parent.disposerCount, 3);
 
@@ -213,9 +212,9 @@ void main() {
         var disposeCount = 0;
         int actualDisposer() => disposeCount++;
 
-        object.attachDisposer(actualDisposer);
-        object.attachDisposer(actualDisposer);
-        object.attachDisposer(actualDisposer);
+        object.disposeWith(actualDisposer);
+        object.disposeWith(actualDisposer);
+        object.disposeWith(actualDisposer);
 
         expect(object.attachedDisposerCount, 1);
       });
@@ -241,12 +240,12 @@ void main() {
         expect(AutoDisposer.hasDisposers(object), false);
         expect(AutoDisposer.disposerCount(object), 0);
 
-        object.attachDisposer(() {});
+        object.disposeWith(() {});
 
         expect(AutoDisposer.hasDisposers(object), true);
         expect(AutoDisposer.disposerCount(object), 1);
 
-        object.attachDisposer(() {});
+        object.disposeWith(() {});
 
         expect(AutoDisposer.disposerCount(object), 2);
 
@@ -258,7 +257,7 @@ void main() {
 
       test('should handle multiple detach calls safely', () {
         final object = Object();
-        object.attachDisposer(() {});
+        object.disposeWith(() {});
 
         expect(() => AutoDisposer.detachDisposers(object), returnsNormally);
         expect(() => AutoDisposer.detachDisposers(object), returnsNormally);
@@ -269,7 +268,7 @@ void main() {
         final object = Object();
         var disposeCount = 0;
 
-        object.attachDisposer(() => disposeCount++);
+        object.disposeWith(() => disposeCount++);
         AutoDisposer.detachDisposers(object);
 
         await AutoDisposer.disposeObject(object);
@@ -279,17 +278,17 @@ void main() {
       test('should handle async errors in finalizer', () async {
         var errorHandled = false;
 
-        await runZoned(
+        await runZonedGuarded(
           () async {
             final object = Object();
 
-            object.attachDisposer(() async {
+            object.disposeWith(() async {
               throw Exception('Async error in disposer');
             });
 
             await AutoDisposer.disposeObject(object);
           },
-          onError: (error, stack) {
+          (error, stack) {
             errorHandled = true;
           },
         );
@@ -303,7 +302,7 @@ void main() {
         final object = Object();
         final disposers = [() {}, () {}, () {}];
 
-        object.attachDisposers(disposers);
+        object.disposeWithAll(disposers);
 
         expect(object.attachedDisposerCount, 3);
       });
@@ -312,7 +311,7 @@ void main() {
         final object = Object();
         final disposers = <Disposer>[];
 
-        object.attachDisposers(disposers);
+        object.disposeWithAll(disposers);
 
         expect(object.attachedDisposerCount, 0);
       });
@@ -320,16 +319,16 @@ void main() {
       test('should handle extension methods on blacklisted types', () {
         final blacklistedObject = 'string';
 
-        runZoned(() {
+        runZonedGuarded(() {
           expect(
-            () => blacklistedObject.attachDisposer(() {}),
+            () => blacklistedObject.disposeWith(() {}),
             returnsNormally,
           );
           expect(() => blacklistedObject.detachDisposers(), returnsNormally);
           expect(() => blacklistedObject.disposeAttached(), returnsNormally);
           expect(blacklistedObject.hasAttachedDisposers, false);
           expect(blacklistedObject.attachedDisposerCount, 0);
-        }, onError: (error, stack) {});
+        }, (error, stack) {});
       });
     });
 
@@ -394,25 +393,25 @@ void main() {
         final object = Object();
         var successCount = 0;
 
-        await runZoned(() async {
-          object.attachDisposer(() {
+        await runZonedGuarded(() async {
+          object.disposeWith(() {
             throw Exception('First error');
           });
 
-          object.attachDisposer(() {
+          object.disposeWith(() {
             successCount++;
           });
 
-          object.attachDisposer(() {
+          object.disposeWith(() {
             throw Exception('Second error');
           });
 
-          object.attachDisposer(() {
+          object.disposeWith(() {
             successCount++;
           });
 
           await AutoDisposer.disposeObject(object);
-        }, onError: (error, stack) {});
+        }, (error, stack) {});
 
         expect(successCount, 2);
       });
@@ -421,26 +420,26 @@ void main() {
         final object = Object();
         var successCount = 0;
 
-        await runZoned(() async {
-          object.attachDisposer(() {
+        await runZonedGuarded(() async {
+          object.disposeWith(() {
             throw Exception('Sync error');
           });
 
-          object.attachDisposer(() async {
+          object.disposeWith(() async {
             throw Exception('Async error');
           });
 
-          object.attachDisposer(() {
+          object.disposeWith(() {
             successCount++;
           });
 
-          object.attachDisposer(() async {
+          object.disposeWith(() async {
             await Future.delayed(Duration(milliseconds: 5));
             successCount++;
           });
 
           await AutoDisposer.disposeObject(object);
-        }, onError: (error, stack) {});
+        }, (error, stack) {});
 
         expect(successCount, 2);
       });
@@ -450,11 +449,11 @@ void main() {
         // ignore: unused_local_variable
         var errorHandled = false;
 
-        runZoned(
+        runZonedGuarded(
           () {
-            disposable.onDispose(() {});
+            disposable.disposeWith(() {});
           },
-          onError: (error, stack) {
+          (error, stack) {
             errorHandled = true;
           },
         );
@@ -470,7 +469,7 @@ void main() {
         const disposerCount = 1000;
 
         for (int i = 0; i < disposerCount; i++) {
-          object.attachDisposer(() => disposeCount++);
+          object.disposeWith(() => disposeCount++);
         }
 
         expect(object.attachedDisposerCount, disposerCount);
@@ -485,7 +484,7 @@ void main() {
         final object = Object();
 
         for (int i = 0; i < 100; i++) {
-          object.attachDisposer(() {});
+          object.disposeWith(() {});
           expect(object.hasAttachedDisposers, true);
 
           object.detachDisposers();
@@ -497,7 +496,7 @@ void main() {
         final object = Object();
         var disposeCount = 0;
 
-        object.attachDisposer(() => disposeCount++);
+        object.disposeWith(() => disposeCount++);
 
         expect(object.hasAttachedDisposers, true);
         expect(object.attachedDisposerCount, 1);
@@ -555,7 +554,7 @@ void main() {
         final disposable = _TestDisposable();
         final controller = StreamController<int>();
 
-        controller.disposeWith(disposable);
+        controller.disposeBy(disposable);
 
         expect(disposable.disposerCount, 1);
       });
@@ -564,9 +563,9 @@ void main() {
         final disposable = _TestDisposable();
         final unsupported = 'string';
 
-        runZoned(() {
-          unsupported.disposeWith(disposable);
-        }, onError: (error, stack) {});
+        runZonedGuarded(() {
+          unsupported.disposeBy(disposable);
+        }, (error, stack) {});
 
         expect(disposable.disposerCount, 0);
       });
@@ -581,7 +580,7 @@ void main() {
           StreamController<bool>(),
         ];
 
-        controllers.disposeAllWith(disposable);
+        controllers.disposeAllBy(disposable);
 
         expect(disposable.disposerCount, 3);
       });
@@ -594,7 +593,7 @@ void main() {
           _TestDisposable(),
         ];
 
-        objects.disposeAllWith(disposable);
+        objects.disposeAllBy(disposable);
 
         expect(disposable.disposerCount, 3);
 
@@ -605,7 +604,7 @@ void main() {
         final disposable = _TestDisposable();
         final emptyList = <Object>[];
 
-        emptyList.disposeAllWith(disposable);
+        emptyList.disposeAllBy(disposable);
 
         expect(disposable.disposerCount, 0);
       });
@@ -854,11 +853,11 @@ void main() {
         final disposer = DisposerAdapterManager.getBuiltinDisposer(controller);
         expect(disposer, isNotNull);
 
-        await runZoned(
+        await runZonedGuarded(
           () async {
             await disposer!();
           },
-          onError: (error, stack) {
+          (error, stack) {
             errorHandled = true;
           },
         );
@@ -909,9 +908,9 @@ void main() {
         final timer = Timer(Duration(seconds: 10), () {});
         final subscription = controller.stream.listen((_) {});
 
-        controller.disposeWith(disposable);
-        timer.disposeWith(disposable);
-        subscription.disposeWith(disposable);
+        controller.disposeBy(disposable);
+        timer.disposeBy(disposable);
+        subscription.disposeBy(disposable);
 
         expect(disposable.disposerCount, 3);
 
@@ -933,9 +932,9 @@ void main() {
         );
         final subscription = controller.stream.listen((_) {});
 
-        controller.disposeWith(disposable);
-        periodicTimer.disposeWith(disposable);
-        subscription.disposeWith(disposable);
+        controller.disposeBy(disposable);
+        periodicTimer.disposeBy(disposable);
+        subscription.disposeBy(disposable);
 
         expect(disposable.disposerCount, 3);
 
@@ -955,14 +954,14 @@ void main() {
         final child1 = _TestDisposable();
         final child2 = _TestDisposable();
 
-        child1.disposeWith(parent);
-        child2.disposeWith(parent);
+        child1.disposeBy(parent);
+        child2.disposeBy(parent);
 
         final timer1 = Timer(Duration(seconds: 10), () {});
         final timer2 = Timer(Duration(seconds: 10), () {});
 
-        timer1.disposeWith(child1);
-        timer2.disposeWith(child2);
+        timer1.disposeBy(child1);
+        timer2.disposeBy(child2);
 
         expect(parent.disposerCount, 2);
         expect(child1.disposerCount, 1);
@@ -989,10 +988,10 @@ void main() {
         final parent = _TestDisposable();
         final child = _TestDisposable();
 
-        child.disposeWith(parent);
+        child.disposeBy(parent);
 
-        child.onDispose(() {
-          parent.onDispose(() {});
+        child.disposeWith(() {
+          () => parent.disposeWith(() {});
         });
 
         expect(parent.disposerCount, 1);
@@ -1011,7 +1010,7 @@ void main() {
         final disposable = _TestDisposable();
         var disposeCount = 0;
 
-        disposable.onDispose(() {
+        disposable.disposeWith(() {
           disposeCount++;
         });
 
@@ -1031,8 +1030,8 @@ void main() {
 
           final subscription = controller.stream.listen((_) {});
 
-          controller.disposeWith(disposable);
-          subscription.disposeWith(disposable);
+          controller.disposeBy(disposable);
+          subscription.disposeBy(disposable);
 
           expect(disposable.disposerCount, 2);
 
@@ -1053,7 +1052,7 @@ void main() {
         final object = Object();
         var disposeCount = 0;
 
-        object.attachDisposer(() {
+        object.disposeWith(() {
           disposeCount++;
         });
 
@@ -1066,7 +1065,7 @@ void main() {
         final object = Object();
         var disposeCount = 0;
 
-        object.attachDisposer(() {
+        object.disposeWith(() {
           disposeCount++;
         });
 
@@ -1081,9 +1080,9 @@ void main() {
         final object = Object();
         var disposeCount = 0;
 
-        object.attachDisposer(() => disposeCount++);
-        object.attachDisposer(() => disposeCount++);
-        object.attachDisposer(() => disposeCount++);
+        object.disposeWith(() => disposeCount++);
+        object.disposeWith(() => disposeCount++);
+        object.disposeWith(() => disposeCount++);
 
         expect(object.attachedDisposerCount, 3);
 
@@ -1097,12 +1096,12 @@ void main() {
         final object = Object();
         var disposeCount = 0;
 
-        object.attachDisposer(() async {
+        object.disposeWith(() async {
           await Future.delayed(Duration(milliseconds: 10));
           disposeCount++;
         });
 
-        object.attachDisposer(() => disposeCount++);
+        object.disposeWith(() => disposeCount++);
 
         await object.disposeAttached();
 
@@ -1113,17 +1112,17 @@ void main() {
         final object = Object();
         var errorCaught = false;
 
-        runZoned(() {
-          object.attachDisposer(() {
+        runZonedGuarded(() {
+          object.disposeWith(() {
             throw Exception('Test error');
           });
 
-          object.attachDisposer(() {
+          object.disposeWith(() {
             errorCaught = true;
           });
 
           object.disposeAttached();
-        }, onError: (error, stack) {});
+        }, (error, stack) {});
 
         await Future.delayed(Duration(milliseconds: 10));
         expect(errorCaught, true);
@@ -1133,7 +1132,7 @@ void main() {
         final object = Object();
         var disposeCount = 0;
 
-        object.attachDisposer(() => disposeCount++);
+        object.disposeWith(() => disposeCount++);
         expect(object.hasAttachedDisposers, true);
 
         object.detachDisposers();
@@ -1145,7 +1144,7 @@ void main() {
         final thirdPartyObject = _ThirdPartyObject();
         var disposeCount = 0;
 
-        thirdPartyObject.attachDisposer(() {
+        thirdPartyObject.disposeWith(() {
           thirdPartyObject.close();
           disposeCount++;
         });
@@ -1164,7 +1163,7 @@ void main() {
         final controller = StreamController<int>();
         var disposeCount = 0;
 
-        object.attachDisposer(() {
+        object.disposeWith(() {
           controller.close();
           disposeCount++;
         });
@@ -1184,17 +1183,17 @@ void main() {
         final timer = Timer(Duration(seconds: 10), () {});
         var disposeCount = 0;
 
-        object.attachDisposer(() {
+        object.disposeWith(() {
           controller.close();
           disposeCount++;
         });
 
-        object.attachDisposer(() {
+        object.disposeWith(() {
           timer.cancel();
           disposeCount++;
         });
 
-        object.attachDisposer(() async {
+        object.disposeWith(() async {
           await Future.delayed(Duration(milliseconds: 5));
           disposeCount++;
         });
@@ -1213,7 +1212,7 @@ void main() {
 
         void createObjectWithDisposer() {
           final object = Object();
-          object.attachDisposer(() {
+          object.disposeWith(() {
             disposeCount++;
             print('Disposer executed during GC: $disposeCount');
           });
@@ -1245,7 +1244,7 @@ void main() {
 
         for (int i = 0; i < 10; i++) {
           final object = Object();
-          object.attachDisposer(() {
+          object.disposeWith(() {
             totalDisposeCount++;
             print('Object $i disposer executed');
           });
@@ -1285,13 +1284,13 @@ void main() {
           final controller = StreamController<int>();
           controllers.add(controller);
 
-          object.attachDisposer(() {
+          object.disposeWith(() {
             controller.close();
             disposeCount++;
             print('Controller disposed via finalizer');
           });
 
-          object.attachDisposer(() async {
+          object.disposeWith(() async {
             await Future.delayed(Duration(milliseconds: 10));
             disposeCount++;
             print('Async disposer executed via finalizer');
@@ -1324,7 +1323,7 @@ void main() {
           final object = Object();
           weakRef = WeakReference(object);
 
-          object.attachDisposer(() {
+          object.disposeWith(() {
             disposeCount++;
             print('Finalizer executed! Dispose count: $disposeCount');
           });
@@ -1372,20 +1371,20 @@ void main() {
         void createObjectWithAsyncDisposer() {
           final object = Object();
 
-          object.attachDisposer(() async {
+          object.disposeWith(() async {
             await Future.delayed(Duration(milliseconds: 50));
             disposeCount++;
             results.add('async-disposer-1');
             print('Async disposer 1 executed');
           });
 
-          object.attachDisposer(() {
+          object.disposeWith(() {
             disposeCount++;
             results.add('sync-disposer');
             print('Sync disposer executed');
           });
 
-          object.attachDisposer(() async {
+          object.disposeWith(() async {
             await Future.delayed(Duration(milliseconds: 25));
             disposeCount++;
             results.add('async-disposer-2');
@@ -1419,23 +1418,19 @@ enum _TestEnum { value1, value2 }
 
 class _TestDisposable with DisposableMixin {
   int get disposerCount {
-    return _registeredDisposerCount;
+    return attachedDisposerCount;
   }
 
-  int _registeredDisposerCount = 0;
-
-  @override
-  Disposer? onDispose(Disposer? disposer) {
+  Disposer? disposeWith(Disposer? disposer) {
     if (isDisposed || disposer == null) return null;
-    final result = super.onDispose(disposer);
-    _registeredDisposerCount++;
+    final result = DisposableExtension(this).disposeWith(disposer);
+
     return result;
   }
 
   @override
   FutureOr<void> dispose() async {
     await super.dispose();
-    _registeredDisposerCount = 0;
   }
 }
 

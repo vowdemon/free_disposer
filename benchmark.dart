@@ -49,7 +49,7 @@ Future<void> benchmarkDisposableMixin() async {
     final initialCreated = _TestDisposable.createdCount;
     final disposable = _TestDisposable();
     for (int i = 0; i < 1000; i++) {
-      disposable.onDispose(() {});
+      disposable.disposeWith(() {});
     }
     await disposable.dispose();
     return _TestDisposable.createdCount - initialCreated;
@@ -65,7 +65,7 @@ Future<void> benchmarkDisposableMixin() async {
     for (int i = 0; i < 1000; i++) {
       final disposable = _TestDisposable();
       for (int j = 0; j < 10; j++) {
-        disposable.onDispose(() {});
+        disposable.disposeWith(() {});
       }
       disposables.add(disposable);
     }
@@ -84,7 +84,7 @@ Future<void> benchmarkDisposableMixin() async {
     final disposable = _TestDisposable();
 
     for (int i = 0; i < 100; i++) {
-      disposable.onDispose(() async {
+      disposable.disposeWith(() async {
         await Future.delayed(Duration(microseconds: 10));
       });
     }
@@ -113,7 +113,7 @@ Future<void> benchmarkAutoDisposer() async {
     final objects = <Object>[];
     for (int i = 0; i < 5000; i++) {
       final obj = Object();
-      obj.attachDisposer(() {});
+      obj.disposeWith(() {});
       objects.add(obj);
     }
     return objects.length;
@@ -122,7 +122,7 @@ Future<void> benchmarkAutoDisposer() async {
   _measureTimeSync('Attach 500 disposers to single object', () {
     final obj = Object();
     for (int i = 0; i < 500; i++) {
-      obj.attachDisposer(() {});
+      obj.disposeWith(() {});
     }
     return 500;
   });
@@ -134,7 +134,7 @@ Future<void> benchmarkAutoDisposer() async {
     for (int i = 0; i < 1000; i++) {
       final obj = Object();
       for (int j = 0; j < 5; j++) {
-        obj.attachDisposer(() {});
+        obj.disposeWith(() {});
       }
       objects.add(obj);
     }
@@ -151,8 +151,8 @@ Future<void> benchmarkAutoDisposer() async {
 
     for (int i = 0; i < 2000; i++) {
       final obj = Object();
-      obj.attachDisposer(() {});
-      obj.attachDisposer(() {});
+      obj.disposeWith(() {});
+      obj.disposeWith(() {});
       objects.add(obj);
     }
 
@@ -255,8 +255,8 @@ Future<void> benchmarkMemoryUsage() async {
   final objects = <Object>[];
   for (int i = 0; i < 10000; i++) {
     final obj = Object();
-    obj.attachDisposer(() {});
-    obj.attachDisposer(() async {
+    obj.disposeWith(() {});
+    obj.disposeWith(() async {
       await Future.delayed(Duration(microseconds: 1));
     });
     objects.add(obj);
@@ -331,7 +331,7 @@ Future<void> _concurrentDisposal(int count) async {
   for (int i = 0; i < count; i++) {
     final disposable = _TestDisposable();
     for (int j = 0; j < 5; j++) {
-      disposable.onDispose(() async {
+      disposable.disposeWith(() async {
         await Future.delayed(Duration(microseconds: Random().nextInt(100)));
       });
     }
@@ -354,7 +354,7 @@ Future<void> _concurrentAutoDisposer(int count) async {
   for (int i = 0; i < count; i++) {
     final obj = Object();
     for (int j = 0; j < 3; j++) {
-      obj.attachDisposer(() async {
+      obj.disposeWith(() async {
         await Future.delayed(Duration(microseconds: Random().nextInt(50)));
       });
     }
@@ -382,7 +382,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
     await _measureTimeAsync('  $count disposers on single object', () async {
       final disposable = _TestDisposable();
       for (int i = 0; i < count; i++) {
-        disposable.onDispose(() {});
+        disposable.disposeWith(() {});
       }
       await disposable.dispose();
       return count;
@@ -395,7 +395,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
     await _measureTimeAsync('  $count async disposers (10μs each)', () async {
       final disposable = _TestDisposable();
       for (int i = 0; i < count; i++) {
-        disposable.onDispose(() async {
+        disposable.disposeWith(() async {
           await Future.delayed(Duration(microseconds: 10));
         });
       }
@@ -410,7 +410,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
         () async {
       final disposable = _TestDisposable();
       for (int i = 0; i < 100; i++) {
-        disposable.onDispose(() async {
+        disposable.disposeWith(() async {
           await Future.delayed(Duration(microseconds: delayMicros));
         });
       }
@@ -422,7 +422,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
   await _measureTimeAsync('  100 pure async disposers (no delay)', () async {
     final disposable = _TestDisposable();
     for (int i = 0; i < 100; i++) {
-      disposable.onDispose(() async {});
+      disposable.disposeWith(() async {});
     }
     await disposable.dispose();
     return 100;
@@ -440,6 +440,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
 
     _measureTimeSync('  Lookup with $adapterCount adapters (1000 calls)', () {
       final obj = Object();
+      // ignore: unused_local_variable
       var foundCount = 0;
       for (int i = 0; i < 1000; i++) {
         final disposer = DisposerAdapterManager.getDisposer(obj);
@@ -474,7 +475,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
     final objects = <Object>[];
     for (int i = 0; i < 10000; i++) {
       final obj = Object();
-      obj.attachDisposer(() {});
+      obj.disposeWith(() {});
       objects.add(obj);
     }
     return objects.length;
@@ -485,7 +486,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
     final objects = <Object>[];
     for (int i = 0; i < 10000; i++) {
       final obj = Object();
-      obj.attachDisposer(() {});
+      obj.disposeWith(() {});
       objects.add(obj);
     }
     await Future.microtask(() {});
@@ -498,8 +499,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
     final objects = <Object>[];
     for (int i = 0; i < 1000; i++) {
       final obj = Object();
-      obj.attachDisposer(() {});
-      AutoDisposer.flushPendingAttachments();
+      obj.disposeWith(() {});
       objects.add(obj);
     }
     return objects.length;
@@ -507,12 +507,13 @@ Future<void> benchmarkBottleneckAnalysis() async {
 
   _measureTimeSync('    Batch attach operations (1000 objects)', () {
     final objects = <Object>[];
+    final disposers = <Disposer>{};
     for (int i = 0; i < 1000; i++) {
       final obj = Object();
-      obj.attachDisposer(() {});
+      disposers.add(() {});
       objects.add(obj);
     }
-    AutoDisposer.flushPendingAttachments();
+    AutoDisposer.attachDisposers(objects, disposers);
     return objects.length;
   });
 
@@ -521,7 +522,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
   await _measureTimeAsync('  1000 sync disposers', () async {
     final disposable = _TestDisposable();
     for (int i = 0; i < 1000; i++) {
-      disposable.onDispose(() {});
+      disposable.disposeWith(() {});
     }
     await disposable.dispose();
     return 1000;
@@ -530,7 +531,7 @@ Future<void> benchmarkBottleneckAnalysis() async {
   await _measureTimeAsync('  1000 async disposers (no delay)', () async {
     final disposable = _TestDisposable();
     for (int i = 0; i < 1000; i++) {
-      disposable.onDispose(() async {});
+      disposable.disposeWith(() async {});
     }
     await disposable.dispose();
     return 1000;
@@ -629,7 +630,7 @@ class _TestDisposable with DisposableMixin {
 
   _TestDisposable() {
     _createdCount++;
-    onDispose(() {
+    disposeWith(() {
       _disposedCount++;
     });
   }
