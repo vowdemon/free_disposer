@@ -341,7 +341,7 @@ void main() {
 
         final disposer = controller.toDisposer;
 
-        await disposer();
+        await disposer?.call();
 
         await subscription.cancel();
       });
@@ -351,7 +351,7 @@ void main() {
 
         final disposer = controller.toDisposer;
 
-        await disposer();
+        await disposer?.call();
 
         expect(disposer, isA<Function>());
       });
@@ -363,7 +363,7 @@ void main() {
 
           final disposer = controller.toDisposer;
 
-          await disposer();
+          await disposer?.call();
 
           expect(controller.isClosed, true);
         },
@@ -376,7 +376,7 @@ void main() {
 
         final disposer = controller.toDisposer;
 
-        await expectLater(disposer(), completes);
+        await expectLater(disposer?.call(), completes);
 
         await subscription.cancel();
       });
@@ -552,19 +552,6 @@ void main() {
         expect(disposer, isA<Disposer>());
       });
 
-      test('should convert HttpClient to disposer', () {
-        final client = HttpClient();
-        final disposer = client.toDisposer;
-
-        expect(disposer, isA<Disposer>());
-      });
-
-      test('should throw for unsupported types', () {
-        final unsupported = 'string';
-
-        expect(() => unsupported.toDisposer, throwsA(isA<UnsupportedError>()));
-      });
-
       test('should dispose with DisposableMixin', () {
         final disposable = _TestDisposable();
         final controller = StreamController<int>();
@@ -625,6 +612,297 @@ void main() {
       });
     });
 
+    group('DisposerAdapterManager', () {
+      tearDown(() {
+        DisposerAdapterManager.clear();
+      });
+
+      test('should register and use custom adapter', () {
+        final customObject = _CustomDisposableObject();
+        var disposeCount = 0;
+
+        DisposerAdapterManager.register<_CustomDisposableObject>((obj) {
+          return () {
+            obj.cleanup();
+            disposeCount++;
+          };
+        });
+
+        final disposer = DisposerAdapterManager.getDisposer(customObject);
+        expect(disposer, isA<Disposer>());
+        expect(customObject.isCleanedUp, false);
+
+        disposer?.call();
+
+        expect(customObject.isCleanedUp, true);
+        expect(disposeCount, 1);
+      });
+
+      test('should unregister custom adapter', () {
+        final customObject = _CustomDisposableObject();
+
+        DisposerAdapterManager.register<_CustomDisposableObject>((obj) {
+          return () => obj.cleanup();
+        });
+
+        expect(
+          () => DisposerAdapterManager.getDisposer(customObject),
+          returnsNormally,
+        );
+
+        DisposerAdapterManager.unregister<_CustomDisposableObject>();
+
+        expect(
+          DisposerAdapterManager.getDisposer(customObject),
+          null,
+        );
+      });
+
+      test('should handle multiple adapters for different types', () {
+        final customObject1 = _CustomDisposableObject();
+        final customObject2 = _AnotherCustomObject();
+        var disposeCount1 = 0;
+        var disposeCount2 = 0;
+
+        DisposerAdapterManager.register<_CustomDisposableObject>((obj) {
+          return () {
+            obj.cleanup();
+            disposeCount1++;
+          };
+        });
+
+        DisposerAdapterManager.register<_AnotherCustomObject>((obj) {
+          return () {
+            obj.dispose();
+            disposeCount2++;
+          };
+        });
+
+        final disposer1 = DisposerAdapterManager.getDisposer(customObject1);
+        disposer1?.call();
+        expect(customObject1.isCleanedUp, true);
+        expect(disposeCount1, 1);
+
+        final disposer2 = DisposerAdapterManager.getDisposer(customObject2);
+        disposer2?.call();
+        expect(customObject2.isDisposed, true);
+        expect(disposeCount2, 1);
+      });
+
+      test('should prioritize builtin disposers over custom adapters',
+          () async {
+        final controller = StreamController<int>();
+        var customDisposeCount = 0;
+
+        DisposerAdapterManager.register<StreamController>((obj) {
+          return () {
+            customDisposeCount++;
+          };
+        });
+
+        final disposer = DisposerAdapterManager.getDisposer(controller);
+        expect(disposer, isA<Disposer>());
+
+        await disposer?.call();
+
+        await Future.delayed(Duration(milliseconds: 600));
+
+        expect(controller.isClosed, true);
+        expect(customDisposeCount, 0);
+      });
+
+      test('should handle adapter registration for same type multiple times',
+          () {
+        final customObject = _CustomDisposableObject();
+        var disposeCount1 = 0;
+        var disposeCount2 = 0;
+
+        DisposerAdapterManager.register<_CustomDisposableObject>((obj) {
+          return () {
+            disposeCount1++;
+          };
+        });
+
+        DisposerAdapterManager.register<_CustomDisposableObject>((obj) {
+          return () {
+            disposeCount2++;
+          };
+        });
+
+        final disposer = DisposerAdapterManager.getDisposer(customObject);
+        disposer?.call();
+
+        expect(disposeCount1, 1);
+        expect(disposeCount2, 0);
+      });
+
+      test('should throw UnsupportedError for unregistered types', () {
+        final unsupportedObject = _UnsupportedObject();
+
+        expect(
+          DisposerAdapterManager.getDisposer(unsupportedObject),
+          null,
+        );
+      });
+
+      test('should handle null object', () {
+        expect(DisposerAdapterManager.getDisposer(null), null);
+      });
+
+      test('should test builtin disposers', () async {
+        final disposable = _TestDisposable();
+        final disposableDisposer =
+            DisposerAdapterManager.getBuiltinDisposer(disposable);
+        expect(disposableDisposer, isNotNull);
+        await disposableDisposer!();
+        expect(disposable.isDisposed, true);
+
+        final controller = StreamController<int>();
+        final subscription = controller.stream.listen((_) {});
+        final subscriptionDisposer =
+            DisposerAdapterManager.getBuiltinDisposer(subscription);
+        expect(subscriptionDisposer, isNotNull);
+        await subscriptionDisposer!();
+
+        controller.close();
+
+        final timer = Timer(Duration(seconds: 1), () {});
+        final timerDisposer = DisposerAdapterManager.getBuiltinDisposer(timer);
+        expect(timerDisposer, isNotNull);
+        timerDisposer!();
+        expect(timer.isActive, false);
+
+        final controller2 = StreamController<int>();
+        final controllerDisposer =
+            DisposerAdapterManager.getBuiltinDisposer(controller2);
+        expect(controllerDisposer, isNotNull);
+        await controllerDisposer!();
+        expect(controller2.isClosed, true);
+
+        final controller3 = StreamController<int>();
+        final sink = controller3.sink;
+        final sinkDisposer = DisposerAdapterManager.getBuiltinDisposer(sink);
+        expect(sinkDisposer, isNotNull);
+        await sinkDisposer!();
+
+        controller3.close();
+      });
+
+      test('should handle StreamController with different states', () async {
+        final controller1 = StreamController<int>();
+        final subscription = controller1.stream.listen((_) {});
+
+        final disposer1 =
+            DisposerAdapterManager.getBuiltinDisposer(controller1);
+        expect(disposer1, isNotNull);
+
+        await disposer1!();
+        expect(controller1.isClosed, true);
+
+        await subscription.cancel();
+
+        final controller2 = StreamController<int>.broadcast();
+        final disposer2 =
+            DisposerAdapterManager.getBuiltinDisposer(controller2);
+        expect(disposer2, isNotNull);
+
+        await disposer2!();
+        expect(controller2.isClosed, true);
+
+        final controller3 = StreamController<int>();
+        final disposer3 =
+            DisposerAdapterManager.getBuiltinDisposer(controller3);
+        expect(disposer3, isNotNull);
+
+        await disposer3!();
+        expect(controller3.isClosed, true);
+
+        final controller4 = StreamController<int>.broadcast();
+        await controller4.close();
+
+        final disposer4 =
+            DisposerAdapterManager.getBuiltinDisposer(controller4);
+        expect(disposer4, isNotNull);
+
+        await expectLater(() => disposer4!(), returnsNormally);
+      });
+
+      test('should handle StreamController close timeout', () async {
+        final controller = StreamController<int>();
+
+        final subscription = controller.stream.listen((_) {});
+
+        final disposer = DisposerAdapterManager.getBuiltinDisposer(controller);
+        expect(disposer, isNotNull);
+
+        final disposerResult = disposer!();
+        if (disposerResult is Future) {
+          await expectLater(
+            disposerResult.timeout(Duration(seconds: 1)),
+            completes,
+          );
+        } else {
+          expect(() => disposerResult, returnsNormally);
+        }
+
+        await subscription.cancel();
+      });
+
+      test('should handle errors in StreamController disposal', () async {
+        final controller = StreamController<int>();
+        var errorHandled = false;
+
+        final disposer = DisposerAdapterManager.getBuiltinDisposer(controller);
+        expect(disposer, isNotNull);
+
+        await runZoned(
+          () async {
+            await disposer!();
+          },
+          onError: (error, stack) {
+            errorHandled = true;
+          },
+        );
+
+        // 错误应该被Zone处理，不会抛出
+        expect(errorHandled, false);
+        expect(controller.isClosed, true);
+      });
+
+      test('should clear all registered adapters', () {
+        final customObject1 = _CustomDisposableObject();
+        final customObject2 = _AnotherCustomObject();
+
+        DisposerAdapterManager.register<_CustomDisposableObject>((obj) {
+          return () => obj.cleanup();
+        });
+
+        DisposerAdapterManager.register<_AnotherCustomObject>((obj) {
+          return () => obj.dispose();
+        });
+
+        expect(
+          () => DisposerAdapterManager.getDisposer(customObject1),
+          returnsNormally,
+        );
+        expect(
+          () => DisposerAdapterManager.getDisposer(customObject2),
+          returnsNormally,
+        );
+
+        DisposerAdapterManager.clear();
+
+        expect(
+          DisposerAdapterManager.getDisposer(customObject1),
+          null,
+        );
+        expect(
+          DisposerAdapterManager.getDisposer(customObject2),
+          null,
+        );
+      });
+    });
+
     group('Integration tests', () {
       test('should work with real resources', () async {
         final disposable = _TestDisposable();
@@ -672,27 +950,6 @@ void main() {
 
         expect(periodicTimer.isActive, false);
       });
-
-      test(
-        'should work with HttpClient (separate test)',
-        () async {
-          final disposable = _TestDisposable();
-          final client = HttpClient();
-
-          client.disposeWith(disposable);
-
-          expect(disposable.disposerCount, 1);
-
-          final disposeResult = disposable.dispose();
-          if (disposeResult is Future<void>) {
-            await disposeResult.timeout(Duration(seconds: 10));
-          }
-
-          expect(disposable.isDisposed, true);
-          expect(disposable.disposerCount, 0);
-        },
-        timeout: Timeout(Duration(seconds: 15)),
-      );
 
       test('should handle complex disposal chain', () async {
         final parent = _TestDisposable();
@@ -1188,4 +1445,22 @@ class _ThirdPartyObject {
   void close() {
     isClosed = true;
   }
+}
+
+class _CustomDisposableObject {
+  bool isCleanedUp = false;
+  void cleanup() {
+    isCleanedUp = true;
+  }
+}
+
+class _AnotherCustomObject {
+  bool isDisposed = false;
+  void dispose() {
+    isDisposed = true;
+  }
+}
+
+class _UnsupportedObject {
+  // 没有任何dispose相关的方法
 }

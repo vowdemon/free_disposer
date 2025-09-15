@@ -102,6 +102,28 @@ timer.disposeWith(myService);
 subscription.disposeWith(myService);
 ```
 
+## Custom Adapters
+
+Register custom adapters for third-party types:
+
+```dart
+class DatabaseConnection {
+  void close() => print('Database closed');
+}
+
+// Register adapter
+DisposerAdapterManager.register<DatabaseConnection>(
+  (db) => db.close,
+);
+
+// Now it works with the disposal system
+final service = MyService();
+final db = DatabaseConnection();
+
+db.disposeWith(service);    // Works!
+await service.dispose();   // Database closed
+```
+
 ## License
 
 MIT

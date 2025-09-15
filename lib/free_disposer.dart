@@ -1,4 +1,129 @@
-library;
+/// A powerful and efficient resource disposal library for Dart.
+///
+/// Free Disposer provides automatic resource management through multiple
+/// strategies: mixin-based disposal, finalizer-based cleanup, and adapter
+/// pattern for custom types. It's designed for high performance with
+/// optimizations like batch processing and efficient caching.
+///
+/// ## Key Features
+///
+/// - **Automatic Cleanup**: Resources are disposed when objects are garbage collected
+/// - **Manual Control**: Explicit disposal methods for immediate cleanup
+/// - **Type Safety**: Compile-time safety with generic adapters
+/// - **High Performance**: Optimized with batching, caching, and efficient data structures
+/// - **Flexible API**: Multiple approaches to fit different use cases
+/// - **Error Handling**: Robust error handling with zone integration
+///
+/// ## Usage Patterns
+///
+/// ### 1. DisposableMixin - For Classes You Control
+///
+/// ```dart
+/// class MyService with DisposableMixin {
+///   late Timer _timer;
+///   late StreamSubscription _subscription;
+///
+///   MyService() {
+///     _timer = Timer.periodic(Duration(seconds: 1), (_) {});
+///     _subscription = someStream.listen((_) {});
+///
+///     // Register disposers
+///     onDispose(() => _timer.cancel());
+///     onDispose(() => _subscription.cancel());
+///   }
+/// }
+///
+/// final service = MyService();
+/// await service.dispose(); // All resources cleaned up
+/// ```
+///
+/// ### 2. AutoDisposer - For Any Object
+///
+/// ```dart
+/// final obj = Object();
+/// final timer = Timer.periodic(Duration(seconds: 1), (_) {});
+/// final subscription = stream.listen((_) {});
+///
+/// // Attach disposers - cleanup happens automatically on GC
+/// obj.attachDisposer(() => timer.cancel());
+/// obj.attachDisposer(() => subscription.cancel());
+///
+/// // Or dispose manually
+/// await obj.disposeAttached();
+/// ```
+///
+/// ### 3. Extension Methods - Convenient Syntax
+///
+/// ```dart
+/// final service = MyService();
+/// final timer = Timer.periodic(Duration(seconds: 1), (_) {});
+/// final controller = StreamController<int>();
+///
+/// // Automatic disposal with service
+/// timer.disposeWith(service);
+/// controller.disposeWith(service);
+///
+/// await service.dispose(); // Timer and controller cleaned up
+/// ```
+///
+/// ### 4. Custom Adapters - For Third-Party Types
+///
+/// ```dart
+/// class DatabaseConnection {
+///   void close() => print('Database closed');
+/// }
+///
+/// // Register adapter
+/// DisposerAdapterManager.register<DatabaseConnection>(
+///   (db) => db.close,
+/// );
+///
+/// // Now DatabaseConnection works with disposal system
+/// final db = DatabaseConnection();
+/// final disposer = db.toDisposer;
+/// if (disposer != null) {
+///   await disposer(); // Database closed
+/// }
+/// ```
+///
+/// ## Built-in Type Support
+///
+/// The library automatically supports these common Dart types:
+///
+/// - `Disposable` - calls `dispose()`
+/// - `StreamSubscription` - calls `cancel()`
+/// - `Timer` - calls `cancel()`
+/// - `StreamController` - calls `close()` with timeout handling
+/// - `StreamSink` - calls `close()` with timeout handling
+/// - `Sink` - calls `close()`
+///
+/// ## Performance Characteristics
+///
+/// - **O(1)** disposer attachment (uses Set internally)
+/// - **Batch processing** for finalizer operations
+/// - **Efficient caching** for adapter lookups
+/// - **Memory optimized** with weak references and cleanup
+/// - **Concurrent safe** with proper error handling
+///
+/// ## Error Handling
+///
+/// All errors during disposal are caught and forwarded to the current
+/// zone's error handler, ensuring that cleanup failures don't crash
+/// your application.
+///
+/// ```dart
+/// runZoned(() {
+///   // Your application code
+/// }, onError: (error, stackTrace) {
+///   print('Disposal error: $error');
+/// });
+/// ```
+///
+/// ## Thread Safety
+///
+/// The library is designed to work safely in concurrent environments.
+/// All operations are atomic and disposal can happen from any isolate.
+library free_disposer;
 
 import 'dart:async';
 

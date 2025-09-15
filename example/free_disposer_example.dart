@@ -9,6 +9,7 @@ void main() async {
   await autoCleanupExample();
   await manualCleanupExample();
   await complexScenarioExample();
+  await customAdapterExample();
 
   print('\nAll examples completed!');
 }
@@ -190,4 +191,58 @@ Future<void> _forceGC() async {
   }
 
   await Future.delayed(Duration(milliseconds: 200));
+}
+
+/// Custom adapter example for third-party types
+Future<void> customAdapterExample() async {
+  print('Example 5: Custom Adapters - Third-party Types');
+
+  // Register custom adapter
+  DisposerAdapterManager.register<DatabaseConnection>(
+    (db) => db.close,
+  );
+
+  print('  Registered custom adapter');
+
+  // Create service and custom resource
+  final service = MyService();
+  final db = DatabaseConnection('user_db');
+
+  // Now works with disposeWith thanks to adapter
+  db.disposeWith(service);
+  print('  Database attached to service');
+
+  // Use resource
+  db.query('SELECT * FROM users');
+  await Future.delayed(Duration(seconds: 1));
+
+  // Dispose all resources (including custom one)
+  await service.dispose();
+
+  // Clean up adapter
+  DisposerAdapterManager.clear();
+  print('  Custom adapter example completed\n');
+}
+
+// Custom classes for demonstration
+class DatabaseConnection {
+  final String name;
+  bool _isConnected = true;
+
+  DatabaseConnection(this.name) {
+    print('  Database connected: $name');
+  }
+
+  void query(String sql) {
+    if (_isConnected) {
+      print('  Executing query: $sql');
+    }
+  }
+
+  void close() {
+    if (_isConnected) {
+      _isConnected = false;
+      print('  Database connection closed: $name');
+    }
+  }
 }
