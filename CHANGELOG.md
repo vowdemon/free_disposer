@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.0] - 2025-9-17
+
+- More friendly API
+- Fix some bugs
+
 ## [1.0.1] - 2025-9-15
 
 - Added custom adapter system
