@@ -124,6 +124,8 @@ class AutoDisposer {
   /// ```
   static FutureOr<void> disposeObject(Object object) {
     final disposers = _disposers[object];
+    _disposers[object] = null;
+
     if (disposers == null || disposers.isEmpty) return null;
 
     // Detach finalizer to prevent automatic execution
@@ -154,9 +156,6 @@ class AutoDisposer {
         Zone.current.handleUncaughtError(e, st);
       }
     }
-
-    disposers.clear();
-    _disposers[object] = null;
 
     if (futures.isNotEmpty) {
       future = Future.wait(futures, eagerError: false);
