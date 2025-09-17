@@ -1,6 +1,6 @@
 name: free_disposer
 description: A Dart resource management library using Finalizer to automatically dispose resources when objects are garbage collected.
-version: 1.1.0
+version: 1.1.1
 repository: https://github.com/vowdemon/free_disposer
 
 environment:

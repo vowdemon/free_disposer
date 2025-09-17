@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.1.0] - 2025-9-17
+## [1.1.1] - 2025-9-17
 
 - More friendly API
 - Fix some bugs
