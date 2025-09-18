@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.2] - 2025-9-19
+
+- Added builtin `disposerAdapter` support function
+
 ## [1.1.1] - 2025-9-17
 
 - More friendly API
