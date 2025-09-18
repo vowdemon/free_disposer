@@ -183,6 +183,7 @@ class DisposerAdapterManager {
   /// ```
   @pragma('vm:prefer-inline')
   static Disposer? getBuiltinDisposer(Object? object) => switch (object) {
+        Function() f => f,
         Disposable d => d.dispose,
         StreamSubscription s => s.cancel,
         Timer t => t.cancel,

@@ -354,6 +354,28 @@ void main() {
         expect(disposer, isA<Function>());
       });
 
+      test('should handle Function() to disposer', () {
+        void disposer1() {}
+        FutureOr<void> disposer2() {}
+        int disposer3() {
+          return 1;
+        }
+
+        Future<int> disposer4() async {
+          return 1;
+        }
+
+        void disposer5(int a) {}
+        void disposer6([int? a]) {}
+
+        expect(disposer1.toDisposer, disposer1);
+        expect(disposer2.toDisposer, disposer2);
+        expect(disposer3.toDisposer == disposer3, true);
+        expect(disposer4.toDisposer, equals(disposer4));
+        expect(disposer5.toDisposer != disposer5, true);
+        expect(disposer6.toDisposer, disposer6);
+      });
+
       test(
         'should handle broadcast StreamController without listeners',
         () async {
