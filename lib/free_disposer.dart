@@ -134,9 +134,12 @@ library;
 
 import 'dart:async';
 
+import 'package:meta/meta.dart';
+
 part 'src/utils.dart';
 part 'src/shared.dart';
 part 'src/extension.dart';
 part 'src/disposable_mixin.dart';
 part 'src/auto_disposer.dart';
 part 'src/adapter.dart';
+part 'src/disposable_scope.dart';

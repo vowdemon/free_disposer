@@ -81,5 +81,6 @@ abstract class Disposable {
   /// - Clean up in reverse order of initialization when possible
   /// - Handle exceptions gracefully to prevent partial cleanup
   /// - Set disposed flag to prevent further use
+  @mustCallSuper
   FutureOr<void> dispose();
 }

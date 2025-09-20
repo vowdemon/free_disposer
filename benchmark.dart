@@ -11,6 +11,7 @@ void main() async {
   await benchmarkDisposableMixin();
   await benchmarkAutoDisposer();
   await benchmarkAdapterManager();
+  await benchmarkResourceScope();
   await benchmarkMemoryUsage();
   await benchmarkConcurrency();
   await benchmarkBottleneckAnalysis();
@@ -217,6 +218,10 @@ Future<void> benchmarkAdapterManager() async {
       if (disposer != null) count++;
     }
 
+    // Dispose TestDisposable objects to prevent counter issues
+    objects
+        .whereType<_TestDisposable>()
+        .forEach((disposable) => disposable.dispose());
     objects.whereType<Timer>().forEach((timer) => timer.cancel());
 
     return count;
@@ -243,6 +248,170 @@ Future<void> benchmarkAdapterManager() async {
 
   DisposerAdapterManager.clear();
   print('');
+}
+
+Future<void> benchmarkResourceScope() async {
+  print('🏗️ ResourceScope Performance');
+  print('-----------------------------');
+
+  _TestDisposable.resetCounters();
+
+  await _measureTimeAsync('Create and dispose 1,000 scopes', () async {
+    final scopes = <DisposableScope>[];
+    for (int i = 0; i < 1000; i++) {
+      scopes.add(DisposableScope());
+    }
+
+    for (final scope in scopes) {
+      await scope.dispose();
+    }
+
+    return scopes.length;
+  });
+
+  await _measureTimeAsync('Create scope with 100 resources each', () async {
+    final scopes = <DisposableScope>[];
+
+    for (int i = 0; i < 100; i++) {
+      final scope = DisposableScope();
+      for (int j = 0; j < 100; j++) {
+        final resource = _TestDisposable();
+        scope.register(resource);
+      }
+      scopes.add(scope);
+    }
+
+    for (final scope in scopes) {
+      await scope.dispose();
+    }
+
+    return scopes.length * 100;
+  });
+
+  await _measureTimeAsync('Nested scopes (10 levels deep)', () async {
+    final rootScope = DisposableScope();
+    final scopes = <DisposableScope>[rootScope];
+
+    // Create nested scopes
+    var currentScope = rootScope;
+    for (int i = 0; i < 10; i++) {
+      final nestedScope = DisposableScope();
+      currentScope.register(nestedScope);
+      scopes.add(nestedScope);
+      currentScope = nestedScope;
+    }
+
+    // Add resources to each level
+    for (int i = 0; i < scopes.length; i++) {
+      for (int j = 0; j < 10; j++) {
+        final resource = _TestDisposable();
+        scopes[i].register(resource);
+      }
+    }
+
+    await rootScope.dispose();
+    return scopes.length * 10;
+  });
+
+  await _measureTimeAsync('Scope.run with auto-registration', () async {
+    final scope = DisposableScope();
+    final resources = <_TestDisposable>[];
+
+    for (int i = 0; i < 1000; i++) {
+      final result = scope.run(() {
+        final resource = _TestDisposable();
+        DisposableScope.currentScope?.register(resource);
+        return resource;
+      });
+      resources.add(result);
+    }
+
+    await scope.dispose();
+    return resources.length;
+  });
+
+  await _measureTimeAsync('Async resource registration', () async {
+    final scope = DisposableScope();
+    final futures = <Future<Disposer>>[];
+
+    for (int i = 0; i < 500; i++) {
+      final resource = _TestDisposable();
+      futures.add(scope.registerAsync(Future.value(resource)));
+    }
+
+    final disposers = await Future.wait(futures);
+    await scope.dispose();
+    return disposers.length;
+  });
+
+  await _measureTimeAsync('Mixed resource types in scope', () async {
+    final scope = DisposableScope();
+    final resources = <Object>[];
+
+    for (int i = 0; i < 200; i++) {
+      resources.add(_TestDisposable());
+      resources.add(StreamController<int>());
+      resources.add(Timer.periodic(Duration(seconds: 10), (_) {}));
+    }
+
+    for (final resource in resources) {
+      scope.register(resource);
+    }
+
+    await scope.dispose();
+
+    // Clean up timers
+    for (final resource in resources) {
+      if (resource is Timer) {
+        resource.cancel();
+      }
+    }
+
+    return resources.length;
+  });
+
+  await _measureTimeAsync('Concurrent scope operations', () async {
+    final futures = <Future<void>>[];
+
+    for (int i = 0; i < 10; i++) {
+      futures.add(_concurrentScopeOperations(100));
+    }
+
+    await Future.wait(futures);
+    return 1000;
+  });
+
+  print(
+      '  ✓ Created: ${_TestDisposable.createdCount}, Disposed: ${_TestDisposable.disposedCount}, Alive: ${_TestDisposable.aliveCount}');
+
+  if (_TestDisposable.aliveCount == 0) {
+    print('  ✅ All ResourceScope objects were properly disposed!');
+  } else if (_TestDisposable.aliveCount < 0) {
+    print(
+        '  ⚠️ Note: Negative alive count indicates some objects were disposed multiple times (expected in concurrent tests)');
+  } else {
+    print(
+        '  ❌ Warning: ${_TestDisposable.aliveCount} objects were not disposed!');
+  }
+
+  print('');
+}
+
+Future<void> _concurrentScopeOperations(int count) async {
+  final scopes = <DisposableScope>[];
+
+  for (int i = 0; i < count; i++) {
+    final scope = DisposableScope();
+    for (int j = 0; j < 5; j++) {
+      final resource = _TestDisposable();
+      scope.register(resource);
+    }
+    scopes.add(scope);
+  }
+
+  for (final scope in scopes) {
+    await scope.dispose();
+  }
 }
 
 Future<void> benchmarkMemoryUsage() async {
@@ -452,7 +621,6 @@ Future<void> benchmarkBottleneckAnalysis() async {
 
   print('\n3. Builtin Type Recognition:');
   final builtinObjects = [
-    _TestDisposable(),
     StreamController<int>(),
     Timer(Duration(seconds: 10), () {}),
     StreamController<String>.broadcast(),
