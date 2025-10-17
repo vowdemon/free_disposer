@@ -30,7 +30,6 @@ part of '../free_disposer.dart';
 /// ```
 mixin DisposableMixin implements Disposable {
   bool _isDisposed = false;
-  bool _isDisposing = false;
 
   /// Whether this object has been disposed.
   bool get isDisposed => _isDisposed;
@@ -40,25 +39,20 @@ mixin DisposableMixin implements Disposable {
   /// Safe to call multiple times. Handles both sync and async disposers.
   @override
   FutureOr<void> dispose() {
-    if (_isDisposed || _isDisposing) return null;
+    if (_isDisposed) return null;
 
-    _isDisposing = true;
+    _isDisposed = true;
 
     try {
       final result = AutoDisposer.disposeObject(this);
       if (result is Future) {
-        return result.whenComplete(() {
-          _isDisposed = true;
-          _isDisposing = false;
-        });
+        return result;
       } else {
-        _isDisposed = true;
-        _isDisposing = false;
         return null;
       }
     } catch (e, st) {
       _isDisposed = true;
-      _isDisposing = false;
+
       Zone.current.handleUncaughtError(e, st);
       rethrow;
     }
