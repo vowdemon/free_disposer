@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.3] - 2025-10-17
+
+- Extract common interfaces from `free_disposer` to `shared_interfaces` package
+- Remove unnecessary variables
+
 ## [1.1.2] - 2025-9-19
 
 - Added builtin `disposerAdapter` support function
