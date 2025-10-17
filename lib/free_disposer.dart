@@ -133,6 +133,10 @@
 library;
 
 import 'dart:async';
+import 'package:shared_interfaces/shared_interfaces.dart';
+
+export 'package:shared_interfaces/shared_interfaces.dart'
+    show Disposable, Disposer, ChainedDisposable;
 
 part 'src/utils.dart';
 part 'src/shared.dart';
